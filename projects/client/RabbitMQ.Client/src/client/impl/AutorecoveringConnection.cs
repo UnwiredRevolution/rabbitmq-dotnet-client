@@ -399,6 +399,8 @@ namespace RabbitMQ.Client.Framing.Impl
                     RecoverConnectionUnblockedHandlers();
 
                     RecoverModels();
+
+
                     if (m_factory.TopologyRecoveryEnabled)
                     {
                         RecoverEntities();
@@ -777,8 +779,11 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverBindings()
         {
+            ESLog.Info("RecoverBindings");
             foreach (var b in m_recordedBindings.Keys)
             {
+                ESLog.Info($"RecoverBinding source = {b.Source}");
+
                 try
                 {
                     b.Recover();
@@ -794,6 +799,7 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverConnectionBlockedHandlers()
         {
+            ESLog.Info("RecoverConnectionBlockedHandlers");
             lock (m_eventLock)
             {
                 m_delegate.ConnectionBlocked += m_recordedBlockedEventHandlers;
@@ -802,12 +808,18 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private bool RecoverConnectionDelegate()
         {
+
+
+            ESLog.Info("RecoverConnectionDelegate starting");
+
             while (!ManuallyClosed)
             {
                 try
                 {
                     var fh = endpoints.SelectOne(m_factory.CreateFrameHandler);
+                    ESLog.Info($"RecoverConnectionDelegate: Creating connection to {fh.Endpoint.HostName}");
                     m_delegate = new Connection(m_factory, false, fh, this.ClientProvidedName);
+                    ESLog.Info($"RecoverConnectionDelegate: Connection to {fh.Endpoint.HostName} successful");
                     return true;
                 }
                 catch (Exception e)
@@ -846,16 +858,20 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverConnectionShutdownHandlers()
         {
+            ESLog.Info($"RecoverConnectionShutdownHandlers");
+
             m_delegate.ConnectionShutdown += m_recordedShutdownEventHandlers;
         }
 
         private void RecoverConnectionUnblockedHandlers()
         {
+            ESLog.Info($"RecoverConnectionUnblockedHandlers");
             m_delegate.ConnectionUnblocked += m_recordedUnblockedEventHandlers;
         }
 
         private void RecoverConsumers()
         {
+            ESLog.Info($"RecoverConsumers");
             foreach (KeyValuePair<string, RecordedConsumer> pair in m_recordedConsumers)
             {
                 string tag = pair.Key;
@@ -913,8 +929,10 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverExchanges()
         {
+            ESLog.Info("RecoverExchanges");
             foreach (RecordedExchange rx in m_recordedExchanges.Values)
             {
+                ESLog.Info($"RecoverExchange type = {rx.Type}");
                 try
                 {
                     rx.Recover();
@@ -930,10 +948,13 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverModels()
         {
+
+            ESLog.Info("RecoverModels");
             lock (m_models)
             {
                 foreach (AutorecoveringModel m in m_models)
                 {
+                    ESLog.Info($"RecoverModel channel {m.ChannelNumber}");
                     m.AutomaticallyRecover(this, m_delegate);
                 }
             }
@@ -941,10 +962,12 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverQueues()
         {
+            ESLog.Info($"RecoverQueues");
             lock (m_recordedQueues)
             {
                 foreach (KeyValuePair<string, RecordedQueue> pair in m_recordedQueues)
                 {
+                    ESLog.Info($"RecoverQueue name = {pair.Key}");
                     string oldName = pair.Key;
                     RecordedQueue rq = pair.Value;
 
