@@ -45,8 +45,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace RabbitMQ.Client.Framing.Impl
 {
@@ -274,6 +276,20 @@ namespace RabbitMQ.Client.Framing.Impl
             }
         }
 
+
+        private static void CancelToken(Object obj)
+        {
+            Thread.Sleep(1500);
+            Console.WriteLine("Canceling the cancellation token from thread {0}...",
+                Thread.CurrentThread.ManagedThreadId);
+            CancellationTokenSource source = obj as CancellationTokenSource;
+            if (source != null) source.Cancel();
+        }
+
+
+
+
+
         /// <summary>
         /// Attempt to recover the connection. Should not throw Exceptions.
         /// </summary>
@@ -282,13 +298,16 @@ namespace RabbitMQ.Client.Framing.Impl
         {
             ESLog.Info("Performing automatic recovery");
 
+            SetRecoveryStartedFlag();
+
             try
             {
-                if (TryRecoverConnectionDelegate())
+                if (  TryRecoverConnectionDelegate())
                 {
                     RegisterForConnectionEvents();
 
                     RecoverModels();
+
                     if (m_factory.TopologyRecoveryEnabled)
                     {
                         RecoverEntities();
@@ -296,7 +315,10 @@ namespace RabbitMQ.Client.Framing.Impl
                     }
 
                     ESLog.Info("Connection recovery completed");
+
                     RunRecoveryEventHandlers();
+
+                    SetRecoveryCompletedFlag();
 
                     return true;
                 }
@@ -307,6 +329,33 @@ namespace RabbitMQ.Client.Framing.Impl
             }
 
             return false;
+#pragma warning restore 162
+#pragma warning restore 162
+        }
+
+        public const string KeyPath = "SOFTWARE\\Unwired Revolution\\RemoteLink\\Client\\RabbitMQ";
+
+
+
+        private void SetRecoveryStartedFlag()
+        {
+            using (var key = OpenSubKeyOrThrow(KeyPath, true))
+            {
+                key.SetValue("AutoRecoveryStarted", DateTime.UtcNow, RegistryValueKind.String);
+            }
+        }
+        private void SetRecoveryCompletedFlag()
+        {
+            using (var key = OpenSubKeyOrThrow(KeyPath, true))
+            {
+                key.SetValue("AutoRecoveryStarted", "", RegistryValueKind.String);
+            }
+        }
+
+        private static RegistryKey OpenSubKeyOrThrow(string keyPath, bool writable = false)
+        {
+            return Registry.LocalMachine.OpenSubKey(keyPath, writable) ?? throw new ApplicationException(
+                       $"Expected sub-key {keyPath} not found in registry.");
         }
 
         public void Close(ShutdownEventArgs reason)
@@ -497,6 +546,8 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RegisterForConnectionEvents()
         {
+
+            ESLog.Info("RegisterForConnectionEvents");
             m_delegate.ConnectionShutdown += OnConnectionShutdown;
             m_delegate.CallbackException += OnCallbackException;
             m_delegate.ConnectionBlocked += OnConnectionBlocked;
@@ -659,8 +710,11 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverBindings()
         {
+            ESLog.Info("RecoverBindings");
             foreach (var b in m_recordedBindings.Keys)
             {
+                ESLog.Info($"RecoverBinding source = {b.Source}");
+
                 try
                 {
                     b.Recover();
@@ -678,6 +732,7 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private bool TryRecoverConnectionDelegate()
         {
+            ESLog.Info("TryRecoverConnectionDelegate");
             try
             {
                 var fh = endpoints.SelectOne(m_factory.CreateFrameHandler);
@@ -767,8 +822,10 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverExchanges()
         {
+            ESLog.Info("RecoverExchanges");
             foreach (RecordedExchange rx in m_recordedExchanges.Values)
             {
+                ESLog.Info($"RecoverExchange type = {rx.Type}");
                 try
                 {
                     rx.Recover();
@@ -785,10 +842,13 @@ namespace RabbitMQ.Client.Framing.Impl
 
         private void RecoverModels()
         {
+
+            ESLog.Info("RecoverModels");
             lock (m_models)
             {
                 foreach (AutorecoveringModel m in m_models)
                 {
+                    ESLog.Info($"RecoverModel channel {m.ChannelNumber}");
                     m.AutomaticallyRecover(this, m_delegate);
                 }
             }
